@@ -1,0 +1,3 @@
+Compute lagged_forward_returns, lagged_risk_free_rate, lagged_market_forward_excess_returns.
+I could build a VIX proxy from my volatility indicators
+Build a VIX based trading strategy, 
