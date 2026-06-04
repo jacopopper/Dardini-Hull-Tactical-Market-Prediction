@@ -1,0 +1,10 @@
+__pycache__/
+legacy/
+.venv/
+.pytest_cache/
+*.pyc
+*.txt
+*.png
+venv/
+qa.md
+
