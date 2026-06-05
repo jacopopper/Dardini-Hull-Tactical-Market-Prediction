@@ -1,12 +1,14 @@
 # Hull Tactical Market Prediction — Submission Package
 
-This folder contains the exam software and data package for the Kaggle challenge [Hull Tactical Market Prediction](https://www.kaggle.com/competitions/hull-tactical-market-prediction).
+> **Kaggle Competition**: [Hull Tactical Market Prediction](https://www.kaggle.com/competitions/hull-tactical-market-prediction)
+>
+> This folder contains the exam software and data package for a complete tactical market prediction workflow. The notebook predicts S&P 500 daily excess returns, estimates regimes, and converts model confidence into portfolio weights in `[0, 2]`.
+>
+> **Key results**: adjusted Sharpe **0.8605** on a strict temporal holdout (1,500 days, 200-day purge gap), compared with the baseline (`weight = 1.0`) score of **0.7151**.
 
 ## Project Description
 
-The project builds a machine learning pipeline for tactical asset allocation on the S&P 500. It predicts daily excess returns, estimates market regimes, and converts model confidence into portfolio weights between `0` and `2`.
-
-The competition metric is an adjusted Sharpe ratio. It penalizes excessive volatility and underperformance relative to the market, so the strategy defaults to full market exposure (`weight = 1.0`) unless the model has enough confidence to take an active position.
+The competition metric is an adjusted Sharpe ratio. It penalizes excess volatility and sustained underperformance relative to the market index, so the strategy defaults to full market exposure (`weight = 1.0`) unless the model has enough confidence to take an active position.
 
 ## Data
 
@@ -18,12 +20,23 @@ Only `train.csv` is used. The Kaggle `test.csv` file is excluded because it has 
 
 ## Results
 
+| Validation Step          | Adjusted Sharpe |
+| ------------------------ | --------------: |
+| Initial untuned mean CV  |          0.7246 |
+| Best inner CV mean       |      **0.8526** |
+
 | Configuration         | Adjusted Sharpe | Annualized Return | Volatility Ratio | Active Days |
 | --------------------- | --------------: | ----------------: | ---------------: | ----------: |
 | Model strategy        |      **0.8605** |         **20.2%** |            1.020 |       29.5% |
 | Baseline weight = 1.0 |          0.7151 |             16.8% |            1.000 |          -- |
 
-Evaluation uses a strict chronological split: the last 1,500 trading days are held out, with a 200-row purge gap between tuning and evaluation data.
+Evaluation uses a strict chronological split: a tuning block, a 200-day purge gap, and a final holdout of 1,500 trading days. Optuna uses only the inner walk-forward CV folds built from the tuning block; the final holdout is evaluated once after parameter selection.
+
+## Interpretation
+
+The best inner CV score measures how well the selected strategy parameters performed across several historical validation windows before the holdout was touched. The final holdout score is the notebook's unbiased offline estimate.
+
+The model's holdout adjusted Sharpe of 0.8605 is above the baseline weight-1 score of 0.7151, so the selected strategy improves risk-adjusted performance without relying on the excluded Kaggle test file. The fold diagnostics show that performance is not uniform across time: some validation windows benefit more from adaptive weights than others. Mean fold weights stay close to 1.0 in most folds, indicating moderate exposure adjustments based on confidence, volatility, and regime signals.
 
 ## Files
 
