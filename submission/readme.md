@@ -4,7 +4,7 @@
 >
 > This folder contains the exam software and data package for a complete tactical market prediction workflow. The notebook predicts S&P 500 daily excess returns, estimates regimes, and converts model confidence into portfolio weights in `[0, 2]`.
 >
-> **Key results**: adjusted Sharpe **0.8605** on a strict temporal holdout (1,500 days, 200-day purge gap), compared with the baseline (`weight = 1.0`) score of **0.7151**.
+> **Key results**: adjusted Sharpe **0.8605** on the final temporal holdout (1,500 days, 200-day purge gap), compared with the baseline (`weight = 1.0`) score of **0.7151**.
 
 ## Project Description
 
@@ -34,9 +34,9 @@ Evaluation uses a strict chronological split: a tuning block, a 200-day purge ga
 
 ## Interpretation
 
-The best inner CV score measures how well the selected strategy parameters performed across several historical validation windows before the holdout was touched. The final holdout score is the notebook's unbiased offline estimate.
+The best inner CV score shows how the selected strategy parameters performed across several historical validation windows before the final holdout evaluation. The final holdout score is the notebook's held-out offline estimate.
 
-The model's holdout adjusted Sharpe of 0.8605 is above the baseline weight-1 score of 0.7151, so the selected strategy improves risk-adjusted performance without relying on the excluded Kaggle test file. The fold diagnostics show that performance is not uniform across time: some validation windows benefit more from adaptive weights than others. Mean fold weights stay close to 1.0 in most folds, indicating moderate exposure adjustments based on confidence, volatility, and regime signals.
+The model's holdout adjusted Sharpe of 0.8605 is above the baseline weight-1 score of 0.7151, so the adaptive weighting adds value in this split without relying on the excluded Kaggle test file. The fold diagnostics show that performance varies across time: some validation windows benefit more from adaptive weights than others. Mean fold weights stay close to 1.0 in most folds, indicating moderate exposure changes.
 
 ## Files
 

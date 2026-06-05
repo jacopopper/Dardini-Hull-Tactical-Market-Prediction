@@ -48,7 +48,7 @@
 \end{itemize}
 \vspace{0.2cm}
 \begin{block}{Why this matters}
-    Tactical asset allocation dynamically adjusts market exposure based on predictive signals. The adjusted Sharpe's penalties for risk and underperformance make it a highly realistic performance measure.
+    Tactical asset allocation adjusts market exposure based on predictive signals. The adjusted Sharpe metric is useful here because it penalizes both excess risk and falling behind the market.
 \end{block}
 \end{frame}
 
@@ -62,7 +62,7 @@
 \end{align*}
 \vspace{0.05cm}
 \begin{block}{Key insight}
-    The \textbf{quadratic} return penalty makes sustained underperformance catastrophic (falling 5\% behind multiplies the denominator by $\sim$1.25). The strategy \textbf{defaults to index exposure} ($w = 1.0$) unless highly confident.
+    The \textbf{quadratic} return penalty makes sustained underperformance expensive (falling 5\% behind multiplies the denominator by $\sim$1.25). The strategy \textbf{defaults to index exposure} ($w = 1.0$) unless the signal is strong enough.
 \end{block}
 \end{frame}
 
@@ -174,7 +174,7 @@
 \begin{frame}{Volatility Proxy}
 \begin{itemize}
     \item The V1--V13 columns in \texttt{train.csv} are anonymized volatility features
-    \item A \textbf{parameter-free proxy} maps V1--V13 into a unified volatility level
+    \item A simple proxy maps V1--V13 into a unified volatility level
     \item Calculated as the cross-sectional mean: $\text{VIX Proxy}_t = \frac{1}{13} \sum_{i=1}^{13} V_{i, t}$
 \end{itemize}
 \vspace{0.15cm}
@@ -182,7 +182,7 @@
     VIX is a well-known fear gauge. Compressing the volatility dimensions recovers a signal that is:
     \begin{itemize}
         \item Statistically associated with future volatility
-        \item Consistent with market microstructure and fear-gauge literature
+        \item A useful volatility signal for this dataset
         \item Useful for regime detection and risk-aware position sizing
     \end{itemize}
 \end{block}
@@ -329,7 +329,7 @@ Two sequential guards applied after the base weight calculation:
 
 \vspace{0.2cm}
 \begin{block}{Defensive Mechanism}
-    The quadratic return penalty makes underperformance catastrophic. Guards act defensively, preventing severe drawdown and underperformance without limiting upside.
+    The quadratic return penalty makes underperformance costly. Guards act defensively, reducing downside risk without removing the strategy's upside exposure.
 \end{block}
 \end{frame}
 
@@ -342,10 +342,10 @@ Two sequential guards applied after the base weight calculation:
 % ===== Slide 14: Walk-Forward Validation =====
 \begin{frame}{Walk-Forward Backtesting}
 \begin{itemize}
-    \item \textbf{WalkForwardBacktester} re-fits the \textbf{entire pipeline} independently in each fold
-    \item Features, regime, model, and strategy are all refit from scratch per fold
+    \item Each CV fold re-fits the \textbf{entire modeling pipeline} independently
+    \item Features, regime detector, and return model are all refit from scratch per fold
     \item No state, scaler, or model weight is shared between folds
-    \item Each fold is scored with the exact competition metric
+    \item Model predictions are cached; strategy parameters are then scored with the exact competition metric
 \end{itemize}
 \vspace{0.15cm}
 \begin{block}{Fold-by-Fold Validation Diagnostics}
@@ -355,12 +355,12 @@ Two sequential guards applied after the base weight calculation:
         \toprule
         \textbf{Fold} & \textbf{Validation Range} & \textbf{Adj.\ Sharpe} & \textbf{Mean Weight} & \textbf{Dominant Regime} \\
         \midrule
-        0 & 3\,790 -- 4\,372 & +0.9985 & 0.914 & Transition \\
-        1 & 4\,373 -- 4\,955 & -0.2741 & 1.136 & Transition \\
-        2 & 4\,956 -- 5\,538 & +0.8578 & 0.981 & Bear (High Vol) \\
-        3 & 5\,539 -- 6\,121 & +1.5707 & 1.012 & Transition \\
-        4 & 6\,122 -- 6\,704 & +0.9661 & 0.950 & Bear (High Vol) \\
-        5 & 6\,705 -- 7\,287 & +0.9965 & 0.930 & Transition \\
+        1 & 3\,790 -- 4\,372 & +0.9985 & 0.914 & Transition \\
+        2 & 4\,373 -- 4\,955 & -0.2741 & 1.136 & Transition \\
+        3 & 4\,956 -- 5\,538 & +0.8578 & 0.981 & Bear (High Vol) \\
+        4 & 5\,539 -- 6\,121 & +1.5707 & 1.012 & Transition \\
+        5 & 6\,122 -- 6\,704 & +0.9661 & 0.950 & Bear (High Vol) \\
+        6 & 6\,705 -- 7\,287 & +0.9965 & 0.930 & Transition \\
         \bottomrule
     \end{tabular}
     \end{center}
@@ -368,25 +368,17 @@ Two sequential guards applied after the base weight calculation:
 \end{frame}
 
 % ===== Slide 15: Hyperparameter Tuning =====
-\begin{frame}{Two-Stage Tuning Strategy}
-\begin{enumerate}
-    \item \textbf{Stage 1}, joint model + strategy sweep
-    \begin{itemize}
-        \item Features built once; 100 Optuna trials
-        \item Each trial refits the full model ($\sim$90 min total)
-        \item Initial baseline strategy CV adjusted Sharpe: \textbf{0.7246}
-        \item Purpose: identify a good model parameter region
-    \end{itemize}
-    \item \textbf{Stage 2}, strategy-only sweep
-    \begin{itemize}
-        \item Features \textbf{and} model pre-built once
-        \item 300 trials sweep strategy params only ($\sim$50 s total)
-        \item Best fine-tuned CV adjusted Sharpe: \textbf{0.8526}
-    \end{itemize}
-\end{enumerate}
+\begin{frame}{Strategy Tuning}
+\begin{itemize}
+    \item The model pipeline is fixed before tuning strategy parameters
+    \item Inner CV fold predictions are cached once to avoid refitting the model for every trial
+    \item Optuna runs \textbf{40 strategy-only trials} over confidence threshold, gain, target volatility, and soft volatility cap
+    \item Initial untuned strategy mean CV adjusted Sharpe: \textbf{0.7246}
+    \item Best inner CV mean adjusted Sharpe: \textbf{0.8526}
+\end{itemize}
 \vspace{0.2cm}
-\begin{block}{Why separate stages?}
-    Jointly optimising model and strategy parameters confounds the two. The strategy parameters (gain, threshold, vol cap) interact strongly with the competition metric's specific penalty structure and benefit from a dedicated, faster search.
+\begin{block}{Why cache folds?}
+    The expensive feature, regime, and return-model steps are fitted once per fold. Optuna then evaluates only the lightweight weight-generation rule, so the search remains reproducible and fast.
 \end{block}
 \end{frame}
 
@@ -409,7 +401,7 @@ Baseline ($w=1.0$) & 0.7151          & +16.8\%          & 1.000 & --    \\
 \begin{itemize}
     \item \textbf{+20.3\%} improvement in adjusted Sharpe over baseline on untouched holdout
     \item Inner CV mean adjusted Sharpe: \textbf{0.8526} (6 folds)
-    \item Only 29.5\% of days are active, meaning the strategy is highly selective
+    \item Only 29.5\% of days are active, so most days stay close to baseline exposure
     \item Tuned parameters: confidence threshold = 0.364, gain = 179.3, target vol = 0.298, soft vol cap = 1.149
 \end{itemize}
 \end{frame}
@@ -423,8 +415,8 @@ Baseline ($w=1.0$) & 0.7151          & +16.8\%          & 1.000 & --    \\
 \textbf{Risk} & \textbf{Mitigation} \\
 \midrule
 Feature leakage from future & \texttt{fit\_transform} on training only; apply frozen stats \\
-Rolling boundary leakage & 400-row history buffer prepended to test/holdout \\
-Temporal lookahead in CV & Purged walk-forward CV with 200-day purge gap \\
+Rolling boundary leakage & 400-row history buffer prepended to validation/holdout blocks \\
+Temporal lookahead in CV & Purged walk-forward CV; separate 200-day purge before final holdout \\
 Target leakage & Lagged targets only (\texttt{.shift(1)}); target excluded from features \\
 Tuning lookahead & Hyperparameters tuned on inner temporal holdout \\
 XGBoost non-determinism & Enforce \texttt{nthread=1}, \texttt{tree\_method='hist'}, \texttt{seed=42} \\

@@ -2,9 +2,9 @@
 
 > **Kaggle Competition**: <https://www.kaggle.com/competitions/hull-tactical-market-prediction>
 >
-> This project implements a complete pipeline for predicting S&P 500 daily excess returns and converting them into portfolio weights in `[0, 2]`. The objective is to maximize the competition's adjusted Sharpe ratio, which penalizes both excess volatility and sustained underperformance relative to the market index.
+> This project predicts S&P 500 daily excess returns and converts them into portfolio weights in `[0, 2]`. The objective is to maximize the competition's adjusted Sharpe ratio, which penalizes excess volatility and sustained underperformance relative to the market index.
 >
-> **Key results**: adjusted Sharpe **0.8605** on a strict temporal holdout (1,500 days, 200-day purge gap), compared with the baseline (`weight = 1.0`) score of **0.7151**.
+> **Key results**: adjusted Sharpe **0.8605** on the final temporal holdout (1,500 days, 200-day purge gap), compared with the baseline (`weight = 1.0`) score of **0.7151**.
 
 ## Objective
 
@@ -26,9 +26,9 @@ The final evaluation uses a chronological split: a tuning block, a 200-day purge
 
 ## Interpretation
 
-The best inner CV score measures how well the selected strategy parameters performed across several historical validation windows before the holdout was touched. The model's holdout adjusted Sharpe of 0.8605 is above the baseline score of 0.7151, so the selected strategy improves risk-adjusted performance on the offline evaluation.
+The best inner CV score shows how the selected strategy parameters performed across several historical validation windows before the final holdout evaluation. The model's holdout adjusted Sharpe of 0.8605 is above the baseline score of 0.7151, so the adaptive weighting adds value in this split.
 
-The fold diagnostics are not uniform across time. Some validation windows benefit more from adaptive weights than others, while the mean fold weights remain close to 1.0 in most folds. This indicates that the strategy usually stays near market exposure and adjusts exposure moderately when confidence, volatility, and regime signals justify it.
+The fold diagnostics are not uniform across time. Some validation windows benefit more from adaptive weights than others, while the mean fold weights remain close to 1.0 in most folds. This indicates that the strategy usually stays near market exposure and changes exposure moderately.
 
 ## Deliverables
 
