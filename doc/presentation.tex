@@ -41,15 +41,12 @@
 % ===== Slide 3: Competition Overview =====
 \begin{frame}{The Kaggle Challenge}
 \begin{itemize}
-    \item \textbf{Goal}: Predict daily S\&P 500 excess returns and convert to weights in $[0, 2]$
-    \item \textbf{Metric}: Adjusted Sharpe ratio (penalizes risk and underperformance)
-    \item \textbf{Data}: Anonymized macroeconomic, sentiment, and pricing features ($\sim$9k days)
-    \item \textbf{Constraint}: Weights must be between 0 and 2; predictions evaluated daily
+    \item \textbf{Goal}: predict daily S\&P 500 excess returns and output a weight $w \in [0, 2]$
+    \item \textbf{Metric}: adjusted Sharpe ratio, penalizes both excess volatility and return underperformance
+    \item \textbf{Data}: \texttt{train.csv} only, $\sim$9k anonymized trading days (macro, sentiment, pricing, volatility features)
 \end{itemize}
-\vspace{0.2cm}
-\begin{block}{Why this matters}
-    Tactical asset allocation adjusts market exposure based on predictive signals. The adjusted Sharpe metric is useful here because it penalizes both excess risk and falling behind the market.
-\end{block}
+\vspace{0.3cm}
+The adjusted Sharpe metric is what shapes the whole strategy: staying close to the index ($w = 1$) is often better than a confident wrong prediction.
 \end{frame}
 
 % ===== Slide 4: The Adjusted Sharpe Metric =====
@@ -60,37 +57,33 @@
     \text{return\_penalty} &= 1 + \frac{\text{gap}^2}{100} \\[0.05cm]
     \text{gap} &= \max\bigl(0,\; (\mu_{\text{mkt}} - \mu_{\text{strat}}) \times 100 \times 252\bigr)
 \end{align*}
-\vspace{0.05cm}
-\begin{block}{Key insight}
-    The \textbf{quadratic} return penalty makes sustained underperformance expensive (falling 5\% behind multiplies the denominator by $\sim$1.25). The strategy \textbf{defaults to index exposure} ($w = 1.0$) unless the signal is strong enough.
-\end{block}
+\vspace{0.1cm}
+The \textbf{quadratic} return penalty is what makes sustained underperformance really hurt, falling 5\% behind the market annualized multiplies the denominator by $\sim$1.25. This is why I default to $w = 1$ unless the signal is genuinely strong.
 \end{frame}
 
 % ===== Slide 5: Data Overview =====
 \begin{frame}{Data Description}
 \begin{itemize}
-    \item \textbf{Train set}: 8\,990 trading days with forward returns, risk-free rate, and anonymized features
+    \item 8\,990 trading days: forward returns, risk-free rate, and anonymized features
     \begin{itemize}
-        \item Columns: I1--I5 (interest rates), E1--E12 (economic), S1--S5 (sentiment), P1--P11 (pricing), V1--V13 (volatility)
+        \item I1--I5 (interest rates), E1--E12 (economic), S1--S5 (sentiment), P1--P11 (pricing), V1--V13 (volatility)
     \end{itemize}
-    \item \textbf{Project data}: Only \texttt{train.csv}, split chronologically (no random shuffling)
+    \item Split chronologically into three non-overlapping blocks:
 \end{itemize}
-\vspace{0.05cm}
-\begin{block}{Temporal split (no random shuffling!)}
-    \centering
-    \small
-    \begin{tabular}{ccc}
-        \toprule
-        \textbf{Tuning block} & \textbf{Purge gap} & \textbf{Holdout} \\
-        \midrule
-        7\,290 rows & 200 rows & 1\,500 rows \\
-        \bottomrule
-    \end{tabular}
-    
-    \vspace{0.1cm}
-    \raggedright\footnotesize
-    The purge gap prevents autocorrelation leakage between train and evaluation data.
-\end{block}
+\vspace{0.15cm}
+\centering
+\small
+\begin{tabular}{ccc}
+    \toprule
+    \textbf{Tuning block} & \textbf{Purge gap} & \textbf{Holdout} \\
+    \midrule
+    7\,290 rows & 200 rows & 1\,500 rows \\
+    \bottomrule
+\end{tabular}
+
+\vspace{0.15cm}
+\raggedright\footnotesize
+The 200-row purge gap sits between tuning and holdout to prevent autocorrelation leakage at the boundary.
 \end{frame}
 
 
@@ -160,39 +153,29 @@
 \vspace{0.2cm}
 \textbf{Anti-Leakage}
 \begin{itemize}
-    \item Median imputation: train medians only
+    \item Median imputation from train only
     \item 400-row history buffer for rolling windows
     \item Lagged targets only: \texttt{.shift(1)}
 \end{itemize}
 \end{column}
 \end{columns}
 \vspace{0.3cm}
-\textbf{Total}: $\sim$107 engineered features after availability filtering.
+$\sim$107 engineered features after availability filtering.
 \end{frame}
 
 % ===== Slide 8: Volatility Proxy =====
 \begin{frame}{Volatility Proxy}
-\begin{itemize}
-    \item The V1--V13 columns in \texttt{train.csv} are anonymized volatility features
-    \item A simple proxy maps V1--V13 into a unified volatility level
-    \item Calculated as the cross-sectional mean: $\text{VIX Proxy}_t = \frac{1}{13} \sum_{i=1}^{13} V_{i, t}$
-\end{itemize}
-\vspace{0.15cm}
-\begin{block}{Why a proxy?}
-    VIX is a well-known fear gauge. Compressing the volatility dimensions recovers a signal that is:
-    \begin{itemize}
-        \item Statistically associated with future volatility
-        \item A useful volatility signal for this dataset
-        \item Useful for regime detection and risk-aware position sizing
-    \end{itemize}
-\end{block}
-\vspace{0.15cm}
-Four features are derived from the VIX proxy:
+The V1--V13 columns are anonymized, but I treat their cross-sectional mean as a VIX-like fear gauge:
+\[
+\text{VIX Proxy}_t = \frac{1}{13} \sum_{i=1}^{13} V_{i,t}
+\]
+\vspace{0.1cm}
+From this single signal I derive four features fed to both the model and the regime detector:
 \begin{enumerate}
-    \item \textbf{VIX proxy}, cross-sectional mean level signal
-    \item \textbf{VIX percentile rank}, where current VIX sits vs.\ historical distribution
-    \item \textbf{VIX term-slope}, V13 $-$ V1 (volatility term structure)
-    \item \textbf{VIX delta}, day-over-day change (momentum of fear)
+    \item \textbf{VIX proxy}, the raw level
+    \item \textbf{VIX percentile rank}, where it sits in the training distribution (frozen)
+    \item \textbf{VIX term-slope}, V13 $-$ V1, a rough volatility term structure
+    \item \textbf{VIX delta}, day-over-day change, momentum of fear
 \end{enumerate}
 \end{frame}
 
@@ -204,20 +187,17 @@ Four features are derived from the VIX proxy:
 
 % ===== Slide 9: Regime Detection =====
 \begin{frame}{Market Regime Detection}
-\begin{itemize}
-    \item \textbf{Gaussian HMM} with 3 hidden states, diagonal covariance
-    \item Inputs: \texttt{vix\_proxy\_pct}, \texttt{roll\_vol\_20}, \texttt{momentum\_20}, \texttt{autocorr\_20}
+I fit a \textbf{Gaussian HMM} with 3 hidden states and diagonal covariance on four features:
+\texttt{vix\_proxy\_pct}, \texttt{roll\_vol\_20}, \texttt{momentum\_20}, \texttt{autocorr\_20}.
 
+\vspace{0.25cm}
+Each row gets:
+\begin{itemize}
+    \item \texttt{regime\_state}, Viterbi-decoded hidden state
+    \item \texttt{regime\_prob\_\{0,1,2\}}, posterior probabilities
+    \item \texttt{regime\_stability}, confidence in the current assignment
+    \item \texttt{regime\_label}, semantic label (\texttt{bull\_low\_vol}, \texttt{bear\_high\_vol}, \texttt{transition}) assigned by comparing training-set mean returns and volatility across states
 \end{itemize}
-\vspace{0.2cm}
-\begin{block}{Output per row}
-    \begin{itemize}
-        \item \texttt{regime\_state}, Viterbi-decoded hidden state
-        \item \texttt{regime\_prob\_\{0,1,2\}}, posterior probabilities
-        \item \texttt{regime\_stability}, confidence in regime assignment
-        \item \texttt{regime\_label}, semantic labels (e.g. \texttt{bull\_low\_vol}, \texttt{bear\_high\_vol}) assigned by training set mean return/volatility comparisons
-    \end{itemize}
-\end{block}
 \end{frame}
 
 
@@ -228,7 +208,7 @@ Four features are derived from the VIX proxy:
 
 % ===== Slide 10: Return Prediction Model =====
 \begin{frame}{Return Prediction Model (XGBoost)}
-Three models trained simultaneously on \texttt{market\_forward\_excess\_returns}:
+I train three XGBoost models simultaneously on \texttt{market\_forward\_excess\_returns}:
 \vspace{0.15cm}
 \begin{center}
 \small
@@ -243,13 +223,12 @@ Upper quantile (Q90) & \texttt{reg:quantileerror}, $\alpha=0.9$ & Upper bound \\
 \end{tabular}
 \end{center}
 \vspace{0.2cm}
-\textbf{Confidence signal}:
+\textbf{Confidence signal}: how large the point prediction is relative to the interval width,
 \[
 \text{raw\_conf} = \frac{|\text{point\_pred}|}{\max(\text{Q90} - \text{Q10},\; \varepsilon)} \quad \longrightarrow \quad
 \text{confidence} = \operatorname{clip}\!\left(\frac{\text{raw\_conf} - p_{10}}{p_{90} - p_{10}},\; 0,\; 1\right)
 \]
-\vspace{0.1cm}
-Percentiles $p_{10}, p_{90}$ are computed on training data and frozen. This maps raw confidence to $[0,1]$, filtering noise while preserving relative ordering.
+$p_{10}, p_{90}$ are computed on training data and frozen, mapping confidence into $[0,1]$.
 \end{frame}
 
 % ===== Slide 11: Model Hyperparameters =====
@@ -265,72 +244,67 @@ Percentiles $p_{10}, p_{90}$ are computed on training data and frozen. This maps
 \end{itemize}
 \end{column}
 \begin{column}{0.48\textwidth}
-\textbf{Tree Count \& Regularization}
+\textbf{Tree counts}
 \begin{itemize}
-    \item Point model uses \textbf{400 trees} to learn directional signal
-    \item Quantile bounds are limited to \textbf{150 trees} ($\frac{1}{3}$ of point)
-    \item Shorter ensembles act as early stopping to prevent overfitting to noisy tails
+    \item Point model: \textbf{400 trees}
+    \item Quantile bounds: \textbf{150 trees} each, shorter ensembles reduce overfitting to noisy tails
 \end{itemize}
 \end{column}
 \end{columns}
 \vspace{0.3cm}
-\textbf{Purged Walk-Forward CV}: Time-series cross-validation with a configurable purge gap between each training window and validation fold, preventing any forward information leakage through autocorrelated targets.
+\textbf{Purged walk-forward CV}: expanding training windows with a configurable purge gap before each validation fold. No information crosses the boundary through autocorrelated targets.
 \end{frame}
 
 % ===== Slide 12: Position Sizing =====
 \begin{frame}{Confidence-Gated Position Sizing}
+\small
 \begin{columns}[T]
-\begin{column}{0.62\textwidth}
-\textbf{Two-branch logic per time step}:
-\[
-\begin{cases}
-w = 1.0, & \text{if confidence} < \text{threshold}\\[3pt]
-w = 1.0 + \text{gain} \times \text{pred} \times \text{vol\_scale} \times \text{reg\_mult}, & \text{otherwise}
-\end{cases}
-\]
-\vspace{0.1cm}
+\begin{column}{0.55\textwidth}
+\textbf{Weight rule:}
+\begin{align*}
+w &= 1.0 && \text{if conf} < \text{threshold} \\[2pt]
+w &= 1.0 + \text{gain} \cdot \hat{r} \cdot \text{vol\_scale} \cdot \text{reg\_mult} && \text{otherwise}
+\end{align*}
+\vspace{0.05cm}
 \textbf{Volatility scaling} (Moreira \& Muir, 2017):
 \[
 \text{vol\_scale} = \operatorname{clip}\!\left(\frac{\sigma_{\text{target}}}{\sigma_t},\; 0.5,\; 2.0\right)
 \]
 \end{column}
-\begin{column}{0.36\textwidth}
+\begin{column}{0.40\textwidth}
 \textbf{Regime multipliers}
 \vspace{0.15cm}
 \begin{center}
 \small
 \begin{tabular}{lr}
 \toprule
-\textbf{Regime} & \textbf{Multiplier} \\
+\textbf{Regime} & \textbf{Mult.} \\
 \midrule
-Bull, low volatility   & 1.30 \\
-Normal                 & 1.00 \\
-Transition             & 0.70 \\
-Bear, high volatility  & 0.50 \\
+Bull, low vol  & 1.30 \\
+Normal         & 1.00 \\
+Transition     & 0.70 \\
+Bear, high vol & 0.50 \\
 \bottomrule
 \end{tabular}
 \end{center}
 \end{column}
 \end{columns}
-\vspace{0.25cm}
-\begin{block}{Rationale}
-    The strategy stays at baseline exposure when confidence is low, scales risk inversely to volatility, and reduces active bets in unstable or high-volatility regimes.
-\end{block}
+\vspace{0.15cm}
+\normalsize
+When confidence is low I stay at $w = 1$; otherwise I scale risk inversely to volatility and reduce exposure in adverse regimes.
 \end{frame}
 
 % ===== Slide 13: Runtime Guards =====
 \begin{frame}{Runtime Guards}
-Two sequential guards applied after the base weight calculation:
+Two guards run sequentially after the base weight is computed:
 
 \begin{itemize}
-    \item \textbf{Volatility servo}: If rolling strategy vol / market vol exceeds 1.149 (soft cap) or 1.20 (hard cap), active deviation is scaled back to 55\% or 20\% to avoid the vol penalty.
-    \item \textbf{Return-gap guard}: If strategy return falls behind the market, force $w \geq 1.0$ to prevent further divergence and avoid the quadratic return penalty.
+    \item \textbf{Volatility servo}: if rolling strategy vol / market vol exceeds the soft cap (1.149) or hard cap (1.20), I scale the active deviation back to 55\% or 20\% respectively, keeping the vol penalty from triggering.
+    \item \textbf{Return-gap guard}: if the strategy has fallen behind the market, I force $w \geq 1.0$ to stop the gap from widening and avoid the quadratic return penalty compounding.
 \end{itemize}
 
 \vspace{0.2cm}
-\begin{block}{Defensive Mechanism}
-    The quadratic return penalty makes underperformance costly. Guards act defensively, reducing downside risk without removing the strategy's upside exposure.
-\end{block}
+Both guards are defensive by design, they reduce downside without capping upside on days where the signal is strong and volatility is in range.
 \end{frame}
 
 
@@ -341,45 +315,38 @@ Two sequential guards applied after the base weight calculation:
 
 % ===== Slide 14: Walk-Forward Validation =====
 \begin{frame}{Walk-Forward Backtesting}
-\begin{itemize}
-    \item Each CV fold re-fits the \textbf{entire modeling pipeline} independently
-    \item Features, regime detector, and return model are all refit from scratch per fold
-    \item No state, scaler, or model weight is shared between folds
-    \item Model predictions are cached; strategy parameters are then scored with the exact competition metric
-\end{itemize}
+Each CV fold re-fits the \textbf{entire pipeline} from scratch: features, regime detector, and return model. No state is shared between folds. I cache the model predictions per fold so Optuna only needs to re-run the lightweight weight-generation step.
+
 \vspace{0.15cm}
-\begin{block}{Fold-by-Fold Validation Diagnostics}
-    \begin{center}
-    \scriptsize
-    \begin{tabular}{ccccc}
-        \toprule
-        \textbf{Fold} & \textbf{Validation Range} & \textbf{Adj.\ Sharpe} & \textbf{Mean Weight} & \textbf{Dominant Regime} \\
-        \midrule
-        1 & 3\,790 -- 4\,372 & +0.9985 & 0.914 & Transition \\
-        2 & 4\,373 -- 4\,955 & -0.2741 & 1.136 & Transition \\
-        3 & 4\,956 -- 5\,538 & +0.8578 & 0.981 & Bear (High Vol) \\
-        4 & 5\,539 -- 6\,121 & +1.5707 & 1.012 & Transition \\
-        5 & 6\,122 -- 6\,704 & +0.9661 & 0.950 & Bear (High Vol) \\
-        6 & 6\,705 -- 7\,287 & +0.9965 & 0.930 & Transition \\
-        \bottomrule
-    \end{tabular}
-    \end{center}
-\end{block}
+\begin{center}
+\scriptsize
+\begin{tabular}{ccccc}
+    \toprule
+    \textbf{Fold} & \textbf{Validation Range} & \textbf{Adj.\ Sharpe} & \textbf{Mean Weight} & \textbf{Dominant Regime} \\
+    \midrule
+    1 & 3\,790 -- 4\,372 & +0.9985 & 0.914 & Transition \\
+    2 & 4\,373 -- 4\,955 & -0.2741 & 1.136 & Transition \\
+    3 & 4\,956 -- 5\,538 & +0.8578 & 0.981 & Bear (High Vol) \\
+    4 & 5\,539 -- 6\,121 & +1.5707 & 1.012 & Transition \\
+    5 & 6\,122 -- 6\,704 & +0.9661 & 0.950 & Bear (High Vol) \\
+    6 & 6\,705 -- 7\,287 & +0.9965 & 0.930 & Transition \\
+    \bottomrule
+\end{tabular}
+\end{center}
 \end{frame}
 
 % ===== Slide 15: Hyperparameter Tuning =====
 \begin{frame}{Strategy Tuning}
-\begin{itemize}
-    \item The model pipeline is fixed before tuning strategy parameters
-    \item Inner CV fold predictions are cached once to avoid refitting the model for every trial
-    \item Optuna runs \textbf{40 strategy-only trials} over confidence threshold, gain, target volatility, and soft volatility cap
-    \item Initial untuned strategy mean CV adjusted Sharpe: \textbf{0.7246}
-    \item Best inner CV mean adjusted Sharpe: \textbf{0.8526}
-\end{itemize}
+I fix the modeling pipeline first and tune only the four strategy parameters (confidence threshold, gain, target volatility, soft vol cap) using Optuna with 40 trials.
+
 \vspace{0.2cm}
-\begin{block}{Why cache folds?}
-    The expensive feature, regime, and return-model steps are fitted once per fold. Optuna then evaluates only the lightweight weight-generation rule, so the search remains reproducible and fast.
-\end{block}
+\begin{itemize}
+    \item Untuned baseline mean CV adjusted Sharpe: \textbf{0.7246}
+    \item After tuning: \textbf{0.8526}
+\end{itemize}
+
+\vspace{0.2cm}
+Caching the fold predictions is important here: fitting the feature pipeline and XGBoost models takes most of the compute, so running 40 Optuna trials on top of cached predictions is fast and fully reproducible.
 \end{frame}
 
 % ===== Slide 16: Results =====
@@ -397,11 +364,9 @@ Baseline ($w=1.0$) & 0.7151          & +16.8\%          & 1.000 & --    \\
 \bottomrule
 \end{tabular}
 \end{center}
-\vspace{0.3cm}
+\vspace{0.25cm}
 \begin{itemize}
-    \item \textbf{+20.3\%} improvement in adjusted Sharpe over baseline on untouched holdout
-    \item Inner CV mean adjusted Sharpe: \textbf{0.8526} (6 folds)
-    \item Only 29.5\% of days are active, so most days stay close to baseline exposure
+    \item Only 29.5\% of days are active, the confidence threshold is deliberately high so most days I just hold the index
     \item Tuned parameters: confidence threshold = 0.364, gain = 179.3, target vol = 0.298, soft vol cap = 1.149
 \end{itemize}
 \end{frame}
@@ -418,49 +383,40 @@ Feature leakage from future & \texttt{fit\_transform} on training only; apply fr
 Rolling boundary leakage & 400-row history buffer prepended to validation/holdout blocks \\
 Temporal lookahead in CV & Purged walk-forward CV; separate 200-day purge before final holdout \\
 Target leakage & Lagged targets only (\texttt{.shift(1)}); target excluded from features \\
-Tuning lookahead & Hyperparameters tuned on inner temporal holdout \\
+Tuning lookahead & Strategy parameters tuned on inner temporal holdout \\
 XGBoost non-determinism & Enforce \texttt{nthread=1}, \texttt{tree\_method='hist'}, \texttt{seed=42} \\
 \bottomrule
 \end{tabular}
 \end{table}
-\vspace{0.15cm}
-\begin{block}{Critical Importance}
-    Strict anti-leakage controls prevent inflated backtest performance. Purge gaps and history buffering are mandatory for reliable time-series modeling.
-\end{block}
+\vspace{0.2cm}
+Any one of these omissions would inflate the backtest. The purge gap and history buffer are the two that are easiest to miss.
 \end{frame}
 
 % ===== Slide 18: Reproducibility =====
 \begin{frame}{Reproducibility \& Design Notes}
-\textbf{Reproducibility measures}:
+\textbf{Reproducibility}:
 \begin{itemize}
-    \item All random seeds: \texttt{42} (XGBoost, sklearn, HMM)
-    \item XGBoost: \texttt{nthread=1}, \texttt{tree\_method='hist'} for cross-platform determinism
-    \item Log \texttt{holdout\_size} and \texttt{purge\_gap} with every experiment
+    \item All random seeds set to \texttt{42} (XGBoost, sklearn, HMM)
+    \item \texttt{nthread=1} and \texttt{tree\_method='hist'} for cross-platform determinism
 \end{itemize}
 \vspace{0.3cm}
 \textbf{Why only 29.5\% active days?}
-\begin{itemize}
-    \item The confidence threshold is high, as most days the prediction interval is wide relative to the point estimate
-    \item Active days cluster around high-confidence signals: trend-consistent predictions during low-volatility bull regimes
-    \item Index-tracking as the default absorbs return-gap risk; the strategy can only improve the score by being active
-\end{itemize}
+
+Most days the Q10--Q90 interval is wide relative to the point estimate, so raw confidence is low and I stay at $w = 1$. Active days tend to cluster around trend-consistent predictions in low-volatility bull periods, exactly when the model's signal-to-noise is highest and the vol penalty is least likely to trigger.
 \end{frame}
 
 % ===== Slide 19: Summary =====
 \begin{frame}{Summary}
-\textbf{Key Takeaways}:
 \begin{itemize}
-    \item The adjusted Sharpe's quadratic return penalty fundamentally shapes the strategy design.
-    \item Confidence-gating is essential: default to the index unless high confidence is present.
-    \item Volatility management (Moreira \& Muir, 2017) boosts Sharpe ratio by scaling risk dynamically.
-    \item HMM-based regime detection provides context to optimize position sizing.
-    \item Purged walk-forward validation is mandatory to estimate real out-of-sample performance.
+    \item The quadratic return penalty in the adjusted Sharpe is the main design constraint, it forces a conservative default.
+    \item Confidence-gating on the quantile interval width is what keeps the strategy from overtrading on noisy predictions.
+    \item Volatility scaling (Moreira \& Muir, 2017) and regime multipliers modulate the active bet size without changing the direction.
+    \item Purged walk-forward CV with cached predictions makes the tuning stage both fast and leak-free.
 \end{itemize}
 \end{frame}
 
 % ===== Slide 20: References =====
 \begin{frame}{References}
-\textbf{References}:
 \begin{itemize}
     \item Moreira, A. \& Muir, T. (2017). \textit{Volatility-Managed Portfolios}. Journal of Finance, 72(4), 1611--1644.
     \item Kaggle Competition: \url{https://www.kaggle.com/competitions/hull-tactical-market-prediction}
